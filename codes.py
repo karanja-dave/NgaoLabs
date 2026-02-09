@@ -11,6 +11,10 @@ from sklearn.model_selection import train_test_split
 #models
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.neighbors import KNeighborsClassifier
+
+
 
 # performance metrics 
 from sklearn.metrics import f1_score, accuracy_score, roc_auc_score
@@ -194,5 +198,97 @@ f1_rf=f1_score(y_val, y_pred_rf)
 auc_rf=roc_auc_score(y_val, y_prob_rf)
 
 acc_rf,f1_rf,auc_rf
+
+# select significant features 
+signif_feat=pd.Series(rf_baseline.feature_importances_,index=X_Train.columns).sort_values(ascending=False)
+# remove feat with <0.01 significance to target contribution
+rf_feat = signif_feat[signif_feat > 0.01].index.tolist()
+# Reduce train and validation sets
+X_TrainRF = X_Train[rf_feat]
+X_valRF = X_val[rf_feat]
+
+# iteration 1
+rf_reduced1 = RandomForestClassifier(n_estimators=300,random_state=123,n_jobs=-1)
+#fit
+rf_reduced1.fit(X_TrainRF, y_Train)
+#predict
+y_pred_rf1 = rf_reduced1.predict(X_valRF)
+y_prob_rf1 = rf_reduced1.predict_proba(X_valRF)[:, 1]
+# evaluate
+acc_rf1 = accuracy_score(y_val, y_pred_rf1)
+f1_rf1  = f1_score(y_val, y_pred_rf1)
+auc_rf1 = roc_auc_score(y_val, y_prob_rf1)
+
+acc_rf1, f1_rf1, auc_rf1
+print("The reduced Random Forest model outdoes the baseline by a small margin")
+
+##Gradient boosting
+# baseline
+# init model 
+gb_baseline = GradientBoostingClassifier(n_estimators=300, learning_rate=0.1, max_depth=3, random_state=123)
+# fit model 
+gb_baseline.fit(X_Train, y_Train)
+# predictions
+y_pred_gb = gb_baseline.predict(X_val)
+y_prob_gb = gb_baseline.predict_proba(X_val)[:, 1]
+# evaluate
+acc_gb = accuracy_score(y_val, y_pred_gb)
+f1_gb = f1_score(y_val, y_pred_gb)
+auc_gb = roc_auc_score(y_val, y_prob_gb)
+
+acc_gb, f1_gb, auc_gb
+# feature selection 
+signif_feat_gb=pd.Series(gb_baseline.feature_importances_, index=X_Train.columns).sort_values(ascending=False)
+signif_feat_gb = signif_feat_gb[signif_feat_gb > 0.01].index.tolist()
+
+# feature reduction 
+X_TrainGB = X_Train[signif_feat_gb]
+X_valGB = X_val[signif_feat_gb]
+
+# iteration 1
+gb_reduced=GradientBoostingClassifier(n_estimators=300, learning_rate=0.1, max_depth=3, random_state=123)
+# fit
+gb_reduced.fit(X_TrainGB, y_Train)
+#predict
+y_pred_gb1 =gb_reduced.predict(X_valGB)
+y_prob_gb1 =gb_reduced.predict_proba(X_valGB)[:, 1]
+# evaluate
+acc_gb1 = accuracy_score(y_val, y_pred_gb1)
+f1_gb1  = f1_score(y_val, y_pred_gb1)
+auc_gb1 = roc_auc_score(y_val, y_prob_gb1)
+
+acc_gb1, f1_gb1, auc_gb1
+
+##k nearest neighbors
+#init  baseline
+knn_baseline = KNeighborsClassifier(n_neighbors=5) 
+knn_baseline.fit(X_Train, y_Train)
+
+# 2. Predictions and evaluation
+y_pred_knn = knn_baseline.predict(X_val)
+y_prob_knn = knn_baseline.predict_proba(X_val)[:, 1]
+
+acc_knn = accuracy_score(y_val, y_pred_knn)
+f1_knn = f1_score(y_val, y_pred_knn)
+auc_knn = roc_auc_score(y_val, y_prob_knn)
+
+acc_knn, f1_knn, auc_knn
+
+# 3. Iteration: test different k-values
+k_values = [3, 5, 7, 9, 11, 13]
+results = {}
+
+for k in k_values:
+    knn = KNeighborsClassifier(n_neighbors=k)
+    knn.fit(X_Train, y_Train)
+    y_pred = knn.predict(X_val)
+    y_prob = knn.predict_proba(X_val)[:, 1]
+    results[k] = {
+        "accuracy": accuracy_score(y_val, y_pred),
+        "f1": f1_score(y_val, y_pred),
+        "auc": roc_auc_score(y_val, y_prob)
+    }
+
+results
 
 ###Communicating results
