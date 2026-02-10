@@ -16,9 +16,6 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import ExtraTreesClassifier
 from xgboost import XGBClassifier
 
-
-
-
 # performance metrics 
 from sklearn.metrics import f1_score, accuracy_score, roc_auc_score
 
@@ -334,9 +331,17 @@ auc_et1 = roc_auc_score(y_val, y_prob_et1)
 acc_et1, f1_et1, auc_et1
 
 ##XGB model 
-xg_baseline = XGBClassifier()
-
-#fitting the models
+xg_baseline = XGBClassifier(min_child_weight=1, gamma=1, subsample=0.8, max_depth=5)
+#fit
 xg_baseline.fit(X_Train,y_Train)
+# predict
+y_pred_xgb = xg_baseline.predict(X_val)
+y_prob_xgb = xg_baseline.predict_proba(X_val)[:, 1]
 
+# evaluate
+acc_xgb = accuracy_score(y_val, y_pred_xgb)
+f1_xgb  = f1_score(y_val, y_pred_xgb)
+auc_xgb = roc_auc_score(y_val, y_prob_xgb)
+
+acc_xgb, f1_xgb, auc_xgb
 ###Communicating results
