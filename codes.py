@@ -13,6 +13,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import ExtraTreesClassifier
+from xgboost import XGBClassifier
+
 
 
 
@@ -289,6 +292,51 @@ for k in k_values:
         "auc": roc_auc_score(y_val, y_prob)
     }
 
-results
+pd.DataFrame(results)
+
+print("KNN model with k=11 is the best performing, it has highest acc and f1")
+print("F1")
+
+##extra trees 
+# baseline
+et_baseline=ExtraTreesClassifier(n_estimators=300,random_state=123,n_jobs=1)
+# fit
+et_baseline.fit(X_Train,y_Train)
+# predict
+y_pred_et=et_baseline.predict(X_val)
+y_prob_et=et_baseline.predict_proba(X_val)[:,1]
+# evaluate
+acc_et=accuracy_score(y_val,y_pred_et)
+f1_et=f1_score(y_val,y_pred_et)
+auc_et=roc_auc_score(y_val,y_prob_et)
+
+acc_et,f1_et,auc_et
+
+# feature selection 
+signif_feat_et= pd.Series(et_baseline.feature_importances_, index=X_Train.columns).sort_values(ascending=False)
+signif_feat_et=signif_feat_et[signif_feat_et > 0.01].index.tolist()
+# feat reduction 
+X_TrainET = X_Train[signif_feat_et]
+X_valET   = X_val[signif_feat_et]
+
+# iteration 
+et_reduced = ExtraTreesClassifier(n_estimators=500,random_state=123,n_jobs=-1)
+# fit 
+et_reduced.fit(X_TrainET, y_Train)
+# predict
+y_pred_et1 = et_reduced.predict(X_valET)
+y_prob_et1 = et_reduced.predict_proba(X_valET)[:, 1]
+# evaluate
+acc_et1 = accuracy_score(y_val, y_pred_et1)
+f1_et1  = f1_score(y_val, y_pred_et1)
+auc_et1 = roc_auc_score(y_val, y_prob_et1)
+
+acc_et1, f1_et1, auc_et1
+
+##XGB model 
+xg_baseline = XGBClassifier()
+
+#fitting the models
+xg_baseline.fit(X_Train,y_Train)
 
 ###Communicating results
