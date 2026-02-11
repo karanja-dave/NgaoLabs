@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 # machine learning
 from lightgbm import LGBMClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV
 #models
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
@@ -37,8 +38,9 @@ def wrangle(filepath):
     return df
 # load data 
 train=wrangle("data/Train.csv")
-test=wrangle("data/Test.csv")
+test=pd.read_csv("data/Test.csv")
 print(train.head())
+
 print(test.head())
 
 ## Exploratory Data Analysis
@@ -86,6 +88,9 @@ le_feature = {col: LabelEncoder() for col in label_cols}
 
 
 def feature_preprocessing(data, fit=True):
+    # drop uniqueid
+    data = data.drop(columns=['uniqueid'], errors='ignore')
+    
     # One-hot encoding
     data = pd.get_dummies(data, prefix_sep="_", columns=categ_cols)
     
@@ -101,7 +106,8 @@ def feature_preprocessing(data, fit=True):
     else:
         data_scaled = scaler.transform(data)
 
-    return pd.DataFrame(data_scaled,columns=data.columns)
+    return pd.DataFrame(data_scaled, columns=data.columns)
+
 
 
 # pre-process train and test data 
@@ -199,6 +205,7 @@ auc_rf=roc_auc_score(y_val, y_prob_rf)
 
 acc_rf,f1_rf,auc_rf
 
+
 # select significant features 
 signif_feat=pd.Series(rf_baseline.feature_importances_,index=X_Train.columns).sort_values(ascending=False)
 # remove feat with <0.01 significance to target contribution
@@ -292,7 +299,6 @@ for k in k_values:
 pd.DataFrame(results)
 
 print("KNN model with k=11 is the best performing, it has highest acc and f1")
-print("F1")
 
 ##extra trees 
 # baseline
@@ -329,6 +335,7 @@ f1_et1  = f1_score(y_val, y_pred_et1)
 auc_et1 = roc_auc_score(y_val, y_prob_et1)
 
 acc_et1, f1_et1, auc_et1
+print("model performs slightly better than baseline")
 
 ##XGB model 
 xg_baseline = XGBClassifier(min_child_weight=1, gamma=1, subsample=0.8, max_depth=5)
@@ -344,4 +351,46 @@ f1_xgb  = f1_score(y_val, y_pred_xgb)
 auc_xgb = roc_auc_score(y_val, y_prob_xgb)
 
 acc_xgb, f1_xgb, auc_xgb
+
+# iteration 
+# optimize parameters using GridSearchCV
+param_grid={'min_child_weight': [1, 5, 10],
+        'gamma': [0.5, 1],
+        'subsample': [0.6, 0.8, 1.0],
+        'max_depth': [3, 5]
+        }
+
+xgb_grid=GridSearchCV(xg_baseline, param_grid,n_jobs=-1,verbose=2,cv=5)
+xgb_grid.fit(X_Train, y_Train)
+print(xgb_grid.best_params_)
+
+#fit model with optimized parameters
+xgb_model = XGBClassifier(min_child_weight=10, gamma=0.5, subsample=1, max_depth=3)
+# fit
+xgb_model.fit(X_Train, y_Train)
+# predict
+y_pred_xgb_grid = xgb_model.predict(X_val)
+y_prob_xgb_grid = xgb_model.predict_proba(X_val)[:, 1]
+
+acc_xgb_grid = accuracy_score(y_val, y_pred_xgb_grid)
+f1_xgb_grid  = f1_score(y_val, y_pred_xgb_grid)
+auc_xgb_grid = roc_auc_score(y_val, y_prob_xgb_grid)
+
+acc_xgb_grid, f1_xgb_grid, auc_xgb_grid
+
+
+# select appropriate model
+
+print("\n xgb baseline outdoes all the other models!! \n check on the accuracy metric to confirm this")
 ###Communicating results
+# Get the predicted result for the test Data
+test.bank_account = xgb_model.predict(X_test)
+#create submission file
+submission = pd.DataFrame({"uniqueid": test["uniqueid"] + " x " + test["country"],
+                           "bank_account": test.bank_account})
+
+
+submission.sample(5)
+
+# Create submission csv file csv file
+submission.to_csv('first_submission.csv', index = False)
