@@ -236,7 +236,7 @@ print("Only the target var is categorical and is of cardinality 2")
 
 #visualization
 #hist:dist of numerical variables
-num_cols = perf_train.select_dtypes(include=["int64","float64"]).columns
+num_cols = perf_train.select_dtypes(include=["int64","float64"]).drop(columns='systemloanid').columns
 
 perf_train[num_cols].hist(bins=30, figsize=(14,10))
 plt.tight_layout()
@@ -285,7 +285,7 @@ customer_features.describe()
 
 ## visualization
 # hist :dist of all numerical vars 
-num_cols = prev_loans_train.select_dtypes(include=["int64","float64"]).columns
+num_cols = prev_loans_train.select_dtypes(include=["int64","float64"]).drop(columns='systemloanid').columns
 
 prev_loans_train[num_cols].hist(bins=30, figsize=(14,10))
 plt.tight_layout()
