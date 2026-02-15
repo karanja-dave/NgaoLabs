@@ -4,6 +4,7 @@ import pandas as pd
 from IPython.display import display
 import matplotlib.pyplot as plt
 import seaborn as sns
+import numpy as np
 
 
 
@@ -109,7 +110,7 @@ prev_loans_train=wrangle_prev_loans("data/trainprevloans.csv")
 prev_loans_test=wrangle_prev_loans('data/testprevloans.csv')
 
 
-### EDA train 
+### EDA 
 ##demographics 
 demo_train.info()
 demo_test.info()
@@ -181,25 +182,28 @@ plt.show()
 
 # categorical encoding
 # init ohe
-ohe = OneHotEncoder(drop='first')  # drop='first' avoids dummy variable trap for linear models
+ohe = OneHotEncoder(drop='first', sparse_output=False)  # drop='first' avoids dummy variable trap for linear models
 
-# fit &transform train
+# select categorical columns for OHE
+ohe_cols = ['bank_account_type', 'employment_status_clients', 'bank_name_clients']
+
+# fit & transform train data
 demo_train_ohe = pd.DataFrame(
-    ohe.fit_transform(demo_train[cate_var]),
-    columns=ohe.get_feature_names_out(cate_var),
+    ohe.fit_transform(demo_train[ohe_cols]),
+    columns=ohe.get_feature_names_out(ohe_cols),
     index=demo_train.index
 )
 
 # transform test data using the same encoder
 demo_test_ohe = pd.DataFrame(
-    ohe.transform(demo_test[cate_var]),
-    columns=ohe.get_feature_names_out(cate_var),
+    ohe.transform(demo_test[ohe_cols]),
+    columns=ohe.get_feature_names_out(ohe_cols),
     index=demo_test.index
 )
 
 # drop original categorical columns and concatenate OHE columns
-demo_train = pd.concat([demo_train.drop(columns=cate_var), demo_train_ohe], axis=1)
-demo_test = pd.concat([demo_test.drop(columns=cate_var), demo_test_ohe], axis=1)
+demo_train = pd.concat([demo_train.drop(columns=ohe_cols), demo_train_ohe], axis=1)
+demo_test = pd.concat([demo_test.drop(columns=ohe_cols), demo_test_ohe], axis=1)
 
 # outliers in age : age shld be b2n [18,80]
 demo_train[~demo_train['age'].between(18, 80)]
@@ -223,6 +227,8 @@ print("\n `good_bad_flag` is the target variable \n don't drop bcz its not in th
 # check for missing values 
 perf_train.isna().mean()>0.5
 perf_test.isna().mean()>0.5
+perf_train.isna().sum()
+perf_test.isna().sum()
 
 # dealing with cardinality 
 perf_train.select_dtypes(include='object')['good_bad_flag'].value_counts()
@@ -230,7 +236,7 @@ print("Only the target var is categorical and is of cardinality 2")
 
 #visualization
 #hist:dist of numerical variables
-num_cols = perf_train.select_dtypes(include=["int64","float64"]).columns
+num_cols = perf_train.select_dtypes(include=["int64","float64"]).drop(columns='systemloanid').columns
 
 perf_train[num_cols].hist(bins=30, figsize=(14,10))
 plt.tight_layout()
@@ -243,6 +249,18 @@ plt.show()
 plt.xlabel("Defaulting")
 plt.ylabel('Count') 
 plt.show()
+
+# Label encooding 
+# split data 
+X_train=perf_train.drop(['good_bad_flag'],axis=1)
+y_train=perf_train['good_bad_flag']
+
+## data preprocessing
+# target encoding
+le_target=LabelEncoder() 
+y_train=le_target.fit_transform(y_train)
+np.unique(y_train)
+
 
 ##previous loans data
 prev_loans_train.info()
@@ -267,7 +285,7 @@ customer_features.describe()
 
 ## visualization
 # hist :dist of all numerical vars 
-num_cols = prev_loans_train.select_dtypes(include=["int64","float64"]).columns
+num_cols = prev_loans_train.select_dtypes(include=["int64","float64"]).drop(columns='systemloanid').columns
 
 prev_loans_train[num_cols].hist(bins=30, figsize=(14,10))
 plt.tight_layout()
