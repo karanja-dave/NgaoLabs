@@ -124,7 +124,69 @@ plt.show()
 
 num_cols.describe()
 
-pd.read_csv('data/Train.csv')['total_cost'].head()
+# barchart
+# func to plot barchart 
+def plot_barh(df, col, ax):
+    df[col].value_counts().plot(
+        kind='bar',
+        ax=ax,
+        color='skyblue'
+    )
+    ax.set_title(f'Distribution of {col}')
+    ax.set_xlabel("Count")
+    ax.set_ylabel(col)
+
+fig, axes = plt.subplots(3, 3, figsize=(18, 12))  # 3 rows × 3 columns
+axes = axes.flatten()
+
+plot_barh(train, 'age_group', axes[0])
+plot_barh(train, 'travel_with', axes[1])
+plot_barh(train, 'purpose', axes[2])
+plot_barh(train, 'main_activity', axes[3])
+plot_barh(train, 'info_source', axes[4])
+plot_barh(train, 'tour_arrangement', axes[5])
+plot_barh(train, 'payment_mode', axes[6])
+plot_barh(train, 'first_trip_tz', axes[7])
+plot_barh(train, 'most_impressing', axes[8])
+
+plt.tight_layout()
+plt.show()
+
+#boxplot
+# select numerical columns
+num_cols = train.select_dtypes(include='float64').columns
+
+# create subplots grid
+n_cols = 3  # number of columns in the grid
+n_rows = (len(num_cols) + n_cols - 1) // n_cols  # calculate required rows
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 5 * n_rows))
+axes = axes.flatten()  # flatten for easy indexing
+
+# plot boxplots for each numerical column
+for i, col in enumerate(num_cols):
+    train.boxplot(column=col, ax=axes[i])
+    axes[i].set_title(f'Boxplot of {col}')
+
+# remove empty subplots
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+plt.tight_layout()
+plt.show()
+
+#scatter plot 
+# List of numerical features to plot against total_cost
+num_vars = ['total_people', 'total_nights', 'mainland_ratio']
+
+# Create a grid of scatter plots
+fig, axes = plt.subplots(1, len(num_vars), figsize=(18, 5))
+
+for i, var in enumerate(num_vars):
+    sns.scatterplot(data=train, x=var, y='total_cost', ax=axes[i])
+    axes[i].set_title(f'{var} vs Total Cost')
+
+plt.tight_layout()
+plt.show()
 
 ### data preprocessing 
 ##encoding the country column
