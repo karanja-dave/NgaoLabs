@@ -7,8 +7,14 @@ import numpy as np
 
 #preprocessing 
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
-from sklearn.model_selection import KFold
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold,  train_test_split, GridSearchCV
+#model building 
+from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, make_scorer
+from xgboost import XGBRegressor
+
+
 
 
 
@@ -264,3 +270,140 @@ encoded_test=feature_preprocessing(test, fit=False)
 X_Train1, X_val, y_Train, y_val = train_test_split(
     encoded_train, y_train, test_size=0.1, random_state=42
 )
+
+### Model Building 
+## linear regression baseline
+lr_base = LinearRegression() #init model
+# fit
+lr_base.fit(X_Train1, y_Train)
+# predict
+y_pred = lr_base.predict(X_val)
+# evalutaion 
+rmse_lr_base = np.sqrt(mean_squared_error(y_val, y_pred))
+mae_lr_base = mean_absolute_error(y_val, y_pred)
+r2_lr_base = r2_score(y_val, y_pred)
+
+print("Baseline Linear Regression")
+rmse_lr_base,mae_lr_base,r2_lr_base
+
+# residual diagonistics 
+residuals = y_val - y_pred
+plt.scatter(y_pred, residuals)
+plt.axhline(0)
+plt.xlabel("Predicted")
+plt.ylabel("Residuals")
+plt.title("Residual Plot")
+plt.show()
+print('\nScatter of residual vs prediction is funnel shaped.\n This means the  variance increases as predicted values increase.\n This strongly supports log-transforming the target\n.')
+print('\nResults suggest log transformation of target variable')
+
+# residual dist 
+plt.hist(residuals, bins=30)
+plt.title("Residual Distribution")
+plt.show()
+print('\nDistribution of residuals is right skewed confirming non normality.\nThis seconds log transformation of target variable')
+
+# inspect coeeficients 
+pd.DataFrame({
+    "Feature": X_Train1.columns,
+    "Coefficient": lr_base.coef_
+}).sort_values(by="Coefficient", key=abs, ascending=False)
+
+## iteration 1: log transformation of target variable
+# log-transformation of target 
+y_train_log = np.log1p(y_Train)
+y_val_log = np.log1p(y_val)
+# init model 
+lin_log = LinearRegression()
+# fit model 
+lin_log.fit(X_Train1, y_train_log)
+# prediction
+y_pred_log = lin_log.predict(X_val)
+# reconvert target predictions from log 
+y_pred = np.expm1(y_pred_log)
+# evaluation
+rmse_lr_log = np.sqrt(mean_squared_error(y_val, y_pred))
+mae_lr_log = mean_absolute_error(y_val, y_pred)
+r2_lr_log = r2_score(y_val, y_pred)
+
+rmse_lr_log,mae_lr_log,r2_lr_log
+
+##decison trees 
+# baseline
+dt_base = DecisionTreeRegressor(random_state=42)
+dt_base.fit(X_Train1, y_Train)
+
+# Predictions
+y_pred = dt_base.predict(X_val)
+
+# Performance metrics
+rmse_dt_base = np.square(mean_squared_error(y_val, y_pred))
+mae_dt_base = mean_absolute_error(y_val, y_pred)
+r2_dt_base = r2_score(y_val, y_pred)
+
+rmse_dt_base,mae_dt_base,r2_dt_base
+print('Baseline performed worser that the regression models, lets tune its hyper-paremters')
+
+# iteration 
+# define parameter grid 
+param_grid = {'max_depth': [3, 5, 7, 10, None],'min_samples_split': [2, 5, 10, 20],
+    'min_samples_leaf': [1, 2, 5, 10],
+    'max_features': [None, 'sqrt', 'log2']}
+
+# define RMSE scorer (negate because GridSearchCV maximizes the score)
+rmse_scorer = make_scorer(mean_squared_error, squared=False, greater_is_better=False)
+# grid Search
+grid_search = GridSearchCV(estimator=DecisionTreeRegressor(random_state=42),
+    param_grid=param_grid,scoring=rmse_scorer,
+    cv=5,n_jobs=-1)
+
+# Fit GridSearch to training data
+grid_search.fit(X_Train1, y_Train)
+
+# Best parameters
+print("Best parameters:", grid_search.best_params_)
+
+# Evaluate on test set
+best_tree = grid_search.best_estimator_
+y_pred = best_tree.predict(X_val)
+
+rmse_dt = np.square(mean_squared_error(y_val, y_pred))
+mae_dt = mean_absolute_error(y_val, y_pred)
+r2_dt = r2_score(y_val, y_pred)
+
+rmse_dt,mae_dt,r2_dt
+
+
+##XGBOOST
+# init model 
+xgb_model = XGBRegressor(objective='reg:squarederror', n_estimators=500, 
+    learning_rate=0.05, max_depth=5, subsample=0.8,
+    colsample_bytree=0.8,random_state=42)
+
+# Fit on training data
+xgb_model.fit(X_Train1, y_Train)
+
+# Predict on validation set
+y_pred_xgb = xgb_model.predict(X_val)
+
+# Evaluate performance
+rmse_xgb = np.sqrt(mean_squared_error(y_val, y_pred_xgb))
+mae_xgb = mean_absolute_error(y_val, y_pred_xgb)
+r2_xgb = r2_score(y_val, y_pred_xgb)
+
+rmse_xgb, mae_xgb, r2_xgb
+
+# Predict total_cost on test set
+test['total_cost'] = xgb_model.predict(encoded_test)
+
+# Create submission DataFrame with only ID and predicted total_cost
+submission = pd.DataFrame({
+    "ID": test["ID"],
+    "total_cost": test['total_cost']
+})
+
+# Preview 5 samples
+submission.sample(5)
+
+# Export to CSV
+submission.to_csv('first_submission.csv', index=False)
