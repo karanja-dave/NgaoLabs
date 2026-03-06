@@ -257,7 +257,7 @@ def feature_preprocessing(data, fit=True):
     
     return data
 
-#split target
+#separate target and feature variables 
 X_train=train.drop(['total_cost'],axis=1)
 y_train=train['total_cost']
 
