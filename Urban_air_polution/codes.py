@@ -9,6 +9,12 @@ import seaborn as sns
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from scipy.cluster.hierarchy import dendrogram, linkage
+from sklearn.decomposition import PCA
+from sklearn.model_selection import train_test_split
+
+# 4. model building 
+from catboost import CatBoostRegressor
+
 
 # 4. evaluation 
 from sklearn.metrics import silhouette_score
@@ -61,6 +67,10 @@ def wrangle(path):
     #multicollinearity on geometry cols (angle columns)
     sat_cols=df.filter(regex='(O3|CO|HCHO|SO2|CLOUD|AER_AI)_(sensor|solar)_(azimuth|zenith)_angle').columns
     df=df.drop(columns=df[sat_cols])
+
+    # remove outliers only if 'target' exists
+    if 'target' in df.columns:
+        df = df[df['target'] < 500]
 
 
 
@@ -191,7 +201,7 @@ axes[1].set_title("Silhouette Analysis")
 plt.tight_layout()
 plt.show()
 
-print('\n Optimal number pf clusters is where k=5\n This is supported by the elbow method and the silhouette analysis\n')
+print('\n Optimal number pf clusters is where k=7\n This is supported by the elbow method and the silhouette analysis\n')
 
 # optimal k-clustering 
 kmeans = KMeans(n_clusters=7, random_state=42)
@@ -199,9 +209,23 @@ kmeans.fit_predict(X_scaled)
 train['cluster']=kmeans.labels_
 train['cluster'].value_counts().sort_index()
 
+#Principal Component Analysis
+pca = PCA(n_components = 2)
+df_2d = pca.fit_transform(X_scaled)
+
+# plotting of clusters 
+colors = ["#1f77b4","#ff7f0e","#2ca02c","#d62728","#9467bd","#8c564b","#17becf"]
+
+for i in range(7):
+  mask = train['cluster'] == i
+  plt.scatter(df_2d[mask,0], df_2d[mask,1],
+              c=colors[i], label =f'cluster {i}')
+plt.legend()
+plt.title('K-Means Clusters')
+plt.show()
+
 ##hierarchical clustering
 hc = linkage(X_scaled, method='ward')
-
 
 # plot the Dendrogram
 plt.figure(figsize=(12, 7))
@@ -220,23 +244,31 @@ dendrogram(hc,
 plt.axhline(y=15, color='r', linestyle='--') 
 plt.show()
 
-X_scaled.to_csv('sample.csv',index=False)
+# feature engineering 
+def lag(df):
+    #add target lag feature
+    df["target.L1"]=y_train.shift(1)
+    df.dropna(inplace=True)
 
+lag(X_train)
 
-for train_idx, val_idx in folds.split(train, pd.qcut(target, 10, labels=False)):
+### model building 
+##data splitting : train and validation sets 
+# split train and validation sets 
+cutoff = int(len(X_train)*0.8)
 
-    X_train, X_val = train.iloc[train_idx][features], train.iloc[val_idx][features]
-    y_train, y_val = target.iloc[train_idx], target.iloc[val_idx]
+X_Train, y_Train = X_train.iloc[:cutoff],y_train.iloc[:cutoff]
+X_val, y_val = X_train.iloc[cutoff:],y_train.iloc[cutoff:]
 
-    model = lgb.LGBMRegressor(**params, n_estimators=2200)
-
-    model.fit(
-        X_train, y_train,
-        eval_set=[(X_val, y_val)],
-        eval_metric="rmse",
-        early_stopping_rounds=200,
-        verbose=False
-    )
-
-    oof[val_idx] = model.predict(X_val)
-    test_pred += model.predict(test[features]) / folds.n_splits
+cb_model = CatBoostRegressor(iterations=30000,
+                             learning_rate=0.045,
+                             depth=8,
+                             eval_metric='RMSE',
+                             random_seed = 42,
+                             bagging_temperature = 0.2,
+                             od_type='Iter',
+                             metric_period = 50,
+                             od_wait=300)
+cb_model.fit(X_Train, y_Train,
+             use_best_model=True,
+             verbose=50)
