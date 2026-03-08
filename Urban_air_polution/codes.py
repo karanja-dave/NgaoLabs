@@ -13,6 +13,8 @@ from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 
 # 4. model building 
+from sklearn.metrics import mean_squared_error
+
 from catboost import CatBoostRegressor
 
 
@@ -164,13 +166,15 @@ plt.tight_layout()
 plt.show()
 
 ###Unsupervised Learning, Clustering
-# separate features from target, drop Id and Date 
-X_train=train.drop(columns=['target','Place_ID X Date','Date','Place_ID'])
-y_train=train['target']
+# get features used in clustering 
+features=train.drop(columns=['target','Place_ID X Date','Date','Place_ID'])
+X_test = test.drop(columns=['Place_ID X Date','Date','Place_ID'], errors='ignore')
 
 #scaling-clustering depends on distrance 
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X_train)
+X_scaled = scaler.fit_transform(features)
+X_test_scaled = scaler.transform(X_test)
+
 
 
 ##k-means clustering (elbow method)
@@ -206,6 +210,7 @@ print('\n Optimal number pf clusters is where k=7\n This is supported by the elb
 # optimal k-clustering 
 kmeans = KMeans(n_clusters=7, random_state=42)
 kmeans.fit_predict(X_scaled)
+test['cluster'] = kmeans.predict(X_test_scaled)
 train['cluster']=kmeans.labels_
 train['cluster'].value_counts().sort_index()
 
@@ -244,16 +249,20 @@ dendrogram(hc,
 plt.axhline(y=15, color='r', linestyle='--') 
 plt.show()
 
-# feature engineering 
-def lag(df):
-    #add target lag feature
-    df["target.L1"]=y_train.shift(1)
-    df.dropna(inplace=True)
+### feature engineering 
+# def lag(df):
+#     #add target lag feature
+#     df["target.L1"]=train['target'].shift(1)
+#     df.dropna(inplace=True)
 
-lag(X_train)
+# lag(train)
 
 ### model building 
 ##data splitting : train and validation sets 
+# separte targed and feature cols 
+X_train=train.drop(columns=['target','Place_ID X Date','Date','Place_ID'])
+y_train=train['target']
+
 # split train and validation sets 
 cutoff = int(len(X_train)*0.8)
 
@@ -272,3 +281,12 @@ cb_model = CatBoostRegressor(iterations=30000,
 cb_model.fit(X_Train, y_Train,
              use_best_model=True,
              verbose=50)
+
+y_pred = cb_model.predict(X_val)
+rmse = np.sqrt(mean_squared_error(y_val, y_pred))
+print("Validation RMSE:", rmse)
+
+
+# predicting the target on test 
+X_test=test[X_train.columns]
+y_pred_test=cb_model.predict(X_test)
