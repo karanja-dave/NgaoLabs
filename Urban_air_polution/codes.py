@@ -15,7 +15,7 @@ from sklearn.model_selection import train_test_split
 # 4. model building 
 from sklearn.metrics import mean_squared_error
 
-from catboost import CatBoostRegressor
+from catboost import CatBoostRegressor, Pool
 
 
 # 4. evaluation 
@@ -250,25 +250,54 @@ plt.axhline(y=15, color='r', linestyle='--')
 plt.show()
 
 ### feature engineering 
-# def lag(df):
-#     #add target lag feature
-#     df["target.L1"]=train['target'].shift(1)
-#     df.dropna(inplace=True)
+def create_lags(df, features, lags, group_col='Place_ID', date_col='Date'):
+    # make copy of the df 
+    data = df.copy()
+    
+    # sort by group and date
+    data.sort_values([group_col, date_col], inplace=True)
+    data.reset_index(drop=True, inplace=True)
+    
+    # create lag features
+    for col in features:
+        for lag in lags:
+            data[f'{col}_lag{lag}'] = data.groupby(group_col)[col].shift(lag)
+    
+    return data
 
-# lag(train)
+lag_features = ['L3_CO_CO_column_number_density','temperature_2m_above_ground','v_component_of_wind_10m_above_ground','u_component_of_wind_10m_above_ground',
+'L3_NO2_NO2_slant_column_number_density','L3_HCHO_tropospheric_HCHO_column_number_density','L3_CLOUD_surface_albedo','L3_AER_AI_sensor_altitude']
+
+lags = [1,2,3]
+
+train_lag = create_lags(train, lag_features, lags)
+test_lag = create_lags(test, lag_features, lags)
+
+print('\n I decided to create lags because our data is giving TS vibes (Date column)\n Lags were created for columns with high feature importance from the cat model')
 
 ### model building 
 ##data splitting : train and validation sets 
+
 # separte targed and feature cols 
 X_train=train.drop(columns=['target','Place_ID X Date','Date','Place_ID'])
 y_train=train['target']
-
-# split train and validation sets 
+# target and feature separation for lagged data 
+X_train_lag=train_lag.drop(columns=['target','Place_ID X Date','Date','Place_ID'])
+y_train_lag=train_lag['target']
+# split train and validation sets
+ 
 cutoff = int(len(X_train)*0.8)
-
+# split for original data 
 X_Train, y_Train = X_train.iloc[:cutoff],y_train.iloc[:cutoff]
 X_val, y_val = X_train.iloc[cutoff:],y_train.iloc[cutoff:]
 
+# split for lagged data 
+cutoff_lag = int(len(X_train_lag) * 0.8)
+X_Train_lag, y_Train_lag = X_train_lag.iloc[:cutoff_lag], y_train_lag.iloc[:cutoff_lag]
+X_val_lag, y_val_lag     = X_train_lag.iloc[cutoff_lag:], y_train_lag.iloc[cutoff_lag:]
+
+
+# init model : 
 cb_model = CatBoostRegressor(iterations=30000,
                              learning_rate=0.045,
                              depth=8,
@@ -287,6 +316,62 @@ rmse = np.sqrt(mean_squared_error(y_val, y_pred))
 print("Validation RMSE:", rmse)
 
 
+# Feature importance 
+# Create a Pool object for correct handling
+train_pool = Pool(X_Train, label=y_Train)
+
+importances = cb_model.get_feature_importance(train_pool)
+feature_names = X_Train.columns
+
+# Print feature importances
+for name, imp in zip(feature_names, importances):
+    print(f"{name}: {imp:.4f}")
+
+# plot feta importance 
+plt.figure(figsize=(12,8))
+plt.barh(feature_names, importances)
+plt.xlabel("Feature Importance")
+plt.title("CatBoost Feature Importance")
+plt.gca().invert_yaxis()  # highest importance on top
+plt.show()
+
+pd.DataFrame({
+    "feature":X_Train.columns,
+    'importance':importances
+})
+
+
+# imporved model : with lags of significant features 
+cb_model_lagged = CatBoostRegressor(iterations=30000,
+                             learning_rate=0.045,
+                             depth=8,
+                             eval_metric='RMSE',
+                             random_seed = 42,
+                             bagging_temperature = 0.2,
+                             od_type='Iter',
+                             metric_period = 50,
+                             od_wait=300)
+
+
+cb_model_lagged.fit(X_Train_lag, y_Train_lag,
+    eval_set=(X_val_lag, y_val_lag),
+    use_best_model=True,
+    verbose=50
+)
+
+y_pred_lag = cb_model_lagged.predict(X_val_lag)
+rmse_lag = np.sqrt(mean_squared_error(y_val_lag, y_pred_lag))
+print("Validation RMSE:", rmse_lag)
 # predicting the target on test 
-X_test=test[X_train.columns]
+X_test=test_lag[X_train_lag.columns]
 y_pred_test=cb_model.predict(X_test)
+
+
+# create submission df
+submission = pd.DataFrame({
+    'Place_ID X Date': test["Place_ID X Date"],
+    "total_cost": y_pred_test
+})
+
+# Export to CSV
+submission.to_csv('first_submission.csv', index=False)
