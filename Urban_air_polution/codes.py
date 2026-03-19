@@ -74,6 +74,9 @@ def wrangle(path):
     if 'target' in df.columns:
         df = df[df['target'] < 500]
 
+    #ensure order in dates because of the lags and splitting 
+    df = df.sort_values("Date")
+
 
 
     return df
@@ -364,7 +367,7 @@ rmse_lag = np.sqrt(mean_squared_error(y_val_lag, y_pred_lag))
 print("Validation RMSE:", rmse_lag)
 # predicting the target on test 
 X_test=test_lag[X_train_lag.columns]
-y_pred_test=cb_model.predict(X_test)
+y_pred_test=cb_model_lagged.predict(X_test)
 
 
 # create submission df
@@ -375,3 +378,5 @@ submission = pd.DataFrame({
 
 # Export to CSV
 submission.to_csv('first_submission.csv', index=False)
+
+
